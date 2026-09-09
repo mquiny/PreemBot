@@ -5,7 +5,7 @@ class NCRTemplate extends BaseTemplate {
   // Collection image URLs for thumbnails
   getCollectionImage(slug) {
     const images = {
-      'rcuccp': 'https://github.com/NCReborn/content-images/blob/main/CT2-LOGO-BW-photomode_31052025_114439.png', // JPE Core
+      'buqwx3': 'https://media.nexusmods.com/9/0/t/med/902613fb-13f0-4608-b0eb-ca377a770b48.webp', // JPE Core
 
     };
     return images[slug] || null;
@@ -27,9 +27,9 @@ class NCRTemplate extends BaseTemplate {
     const headerEmbed = new EmbedBuilder()
       .setTitle(revisionTitle)
       .setDescription(
-        "**⚠️ Important** - To keep the game stable, permanently delete all files in the Steam\\steamapps\\common\\Cyberpunk 2077\\r6\\cache folder with each new revision, verify the game files, then deploy mods from vortex.\n\n" +
-        "Any issues with updating please refer to <#1400940644565782599> & <#1285797091750187039>\n\n" +
-        "If you need further help ping <@&1456751771841204295>"
+        "**⚠️ Important** - To clear out old version files, permanently delete all files in the Cyberpunk 2077\\r6\\cache folder with each new revision, verify the game files, then deploy mods from vortex.\n\n" +
+        "Any issues with updating please refer to our website https://mquiny.github.io/Preem-Team/installation/\n\n" +
+        "If you need further help ping <@&1543374108052426752>"
       )
       .setColor(this.getColor('header'));
 
@@ -44,7 +44,7 @@ class NCRTemplate extends BaseTemplate {
     const updateEmbed = new EmbedBuilder()
       .setTitle("Updating collection")
       .setDescription(
-        "**⚠️ Important** - For a quick guide on updating your collection, follow the section at the end of this channel. <#1503018857567354921>\n\n" 
+        "**⚠️ Important** - For a quick guide on updating your collection, follow the guide on our website https://mquiny.github.io/Preem-Team/installation/\n\n" 
       )
       .setColor(this.getColor('warning'));
 
