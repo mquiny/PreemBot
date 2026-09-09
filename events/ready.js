@@ -7,6 +7,7 @@ const { dispatchStreetCredToSite } = require('../utils/siteStreetCredDispatcher'
 const snapsmithService = require('../services/SnapSmithService');
 const { initShowcaseWatcher } = require('../services/showcase/showcaseWatcher');
 const collectionHealthService = require('../services/CollectionHealthService');
+const serverStatsService = require('../services/ServerStatsService');
 const guildConfigManager = require('../config/guildConfigManager');
 const { getGuildChannelId } = require('../utils/guildConfig');
 const { fetchRevision } = require('../utils/nexusApi');
@@ -28,6 +29,13 @@ module.exports = {
       logger.info('[READY] Revision monitoring started');
     } catch (err) {
       logger.error('[READY] Error starting revision monitor:', err);
+    }
+
+    try {
+      await serverStatsService.start(client);
+      logger.info('[READY] Server stats channels started');
+    } catch (err) {
+      logger.error('[READY] Error starting server stats service:', err);
     }
 
     initShowcaseWatcher(client); // add this

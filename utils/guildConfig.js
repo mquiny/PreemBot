@@ -83,6 +83,32 @@ function getCollectionHealthChannelMap() {
   return parseGuildChannelMap(process.env.COLLECTION_HEALTH_CHANNEL_IDS);
 }
 
+function getStatsCategoryMap() {
+  return parseGuildChannelMap(process.env.STATS_CATEGORY_IDS);
+}
+
+// Category a guild wants the live member/booster stat voice channels
+// created under -- see services/ServerStatsService.js. A guild with no
+// entry here is skipped entirely (opt-in, like collectionHealth above).
+function getStatsCategoryId(guildId) {
+  if (!guildId) return null;
+  return getStatsCategoryMap()[guildId] || null;
+}
+
+function getStatsCollectionMap() {
+  // parseGuildChannelMap just parses "guildId:value" pairs generically --
+  // reused here for a collection slug rather than a channel ID.
+  return parseGuildChannelMap(process.env.STATS_COLLECTION_SLUGS);
+}
+
+// Which collection's mod count / revision number to show in the stats
+// channels, per guild. A guild with no entry here just gets the
+// member/booster stat channels, no mods/revision ones.
+function getStatsCollectionSlug(guildId) {
+  if (!guildId) return null;
+  return getStatsCollectionMap()[guildId] || null;
+}
+
 function getGuildChannelId(guildId, channelType) {
   if (!guildId) return null;
 
@@ -147,5 +173,7 @@ module.exports = {
   getGuildChannelId,
   getModeratorRoleIds,
   getStaffRoleIds,
+  getStatsCategoryId,
+  getStatsCollectionSlug,
   logMissingRequiredGuildChannelMappings,
 };

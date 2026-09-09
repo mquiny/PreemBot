@@ -76,11 +76,17 @@ A multi-rule detection engine (`/antispam` to configure), all scoped per guild:
 - Tracks monthly photomode/showcase submissions in a configured showcase channel, with `/snapmaster-check` and `/snapmaster-stats` to see standings and `/snapmaster-announce` for monthly recap posts
 - SnapSmith grants a recognition role to members who've kept up a strong showcase presence, with `/snapsmith-admin` for management
 
+### 📊 Server Stats
+- Auto-creates and maintains a set of locked, display-only voice channels per guild: **Family Members** (total member count), **Boosters** (server boost count), and — when a collection is configured — **Mods** (distinct mod count in the collection's current revision) and **Revision** (its revision number)
+- Kept up to date every 10 minutes
+- Opt-in per guild via `STATS_CATEGORY_IDS` (and `STATS_COLLECTION_SLUGS` for the Mods/Revision pair) — a guild with no category configured gets no stat channels at all
+
 ### 📈 Utility & Admin
 - `/analytics` — server activity analytics (mod/admin only)
 - `/servers` — list every server the bot is currently in
 - `/diagnostics` — diagnostic tools for troubleshooting the bot itself
 - `/ncrbotmsg` — post a multi-line message as the bot via a modal (admin only)
+- `/postembed` — post one or more rich embeds from a Discohook JSON export, straight from an attached `.json` file (admin only)
 
 ---
 
@@ -124,6 +130,8 @@ All configuration is managed through `.env`. **Never commit your real `.env` fil
 | `SHOWCASE_CHANNEL_IDS`          | ❌       | Per-guild showcase channel map (`guildId:channelId,...`)          |
 | `BOT_SPAM_CHANNEL_IDS`          | ❌       | Per-guild StreetCred/announcement channel map                     |
 | `COLLECTION_HEALTH_CHANNEL_IDS` | ❌       | Per-guild collection health report channel map                    |
+| `STATS_CATEGORY_IDS`            | ❌       | Per-guild category to create the stat voice channels under                |
+| `STATS_COLLECTION_SLUGS`        | ❌       | Per-guild collection slug for the Mods/Revision stat channels             |
 | `LOG_LEVEL`                     | ❌       | Winston log level (default: info)                                 |
 
 See `.env.example` for the full template.
