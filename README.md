@@ -77,7 +77,7 @@ A multi-rule detection engine (`/antispam` to configure), all scoped per guild:
 - SnapSmith grants a recognition role to members who've kept up a strong showcase presence, with `/snapsmith-admin` for management
 
 ### 📊 Server Stats
-- Auto-creates and maintains a set of locked, display-only voice channels per guild: **Family Members** (total member count), **Boosters** (server boost count), and — when a collection is configured — **Mods** (distinct mod count in the collection's current revision) and **Revision** (its revision number)
+- Auto-creates and maintains a set of locked, display-only voice channels per guild: **Family Members** (total member count), **Boosters** (server boost count), and — when a collection is configured — **Mods** (mod file count in the collection's current revision, matching the number shown on its Nexus page) and **Revision** (its revision number)
 - Kept up to date every 10 minutes
 - Opt-in per guild via `STATS_CATEGORY_IDS` (and `STATS_COLLECTION_SLUGS` for the Mods/Revision pair) — a guild with no category configured gets no stat channels at all
 

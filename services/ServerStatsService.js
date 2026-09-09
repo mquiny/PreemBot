@@ -2,9 +2,10 @@
 //
 // Keeps a set of voice channels per guild in sync with live server stats:
 // "Family Members" (total member count), "Boosters" (server boost count),
-// and — when a collection slug is configured — "Mods" (distinct mod count
-// in that collection's current revision) and "Revision" (its revision
-// number). Opt-in per guild via STATS_CATEGORY_IDS, and STATS_COLLECTION_SLUGS
+// and — when a collection slug is configured — "Mods" (mod file count in
+// that collection's current revision, matching the same number shown on
+// the collection's own Nexus page) and "Revision" (its revision number).
+// Opt-in per guild via STATS_CATEGORY_IDS, and STATS_COLLECTION_SLUGS
 // for the mods/revision pair (see utils/guildConfig.js) -- a guild with no
 // category configured is skipped entirely.
 //
@@ -22,7 +23,7 @@ const { ChannelType } = require('discord.js');
 const logger = require('../utils/logger');
 const { getStatsCategoryId, getStatsCollectionSlug } = require('../utils/guildConfig');
 const statsState = require('../utils/serverStatsState');
-const { fetchRevision, processModFiles } = require('../utils/nexusApi');
+const { fetchRevision } = require('../utils/nexusApi');
 
 class ServerStatsService {
   constructor() {
@@ -70,21 +71,15 @@ class ServerStatsService {
         process.env.APP_VERSION
       );
 
-      const rawModFiles = revisionData.modFiles || [];
-      const mods = processModFiles(rawModFiles);
-      const distinctModCount = new Set(mods.map(m => m.id)).size;
+      // Raw modFiles count, not deduped by mod ID -- deliberately matches
+      // what the collection's own Nexus page shows on its "Mods" tab
+      // (confirmed 2026-09: that count is per-file, not per-distinct-mod,
+      // since ~75 mods in this collection bundle 2 files each). Using the
+      // deduped count instead would read as a discrepancy/bug to anyone
+      // comparing the two numbers.
+      const modFileCount = (revisionData.modFiles || []).length;
 
-      // Temporary diagnostic breakdown -- if distinctModCount doesn't
-      // match the collection's own Nexus page count, this line shows
-      // whether the gap is (a) processModFiles dropping entries with no
-      // resolved file.mod (broken/removed file references) or (b) mods
-      // genuinely appearing under multiple files that got deduped. Remove
-      // once the mismatch reported 2026-09 is understood.
-      const droppedNullMod = rawModFiles.length - mods.length;
-      const duplicateFiles = mods.length - distinctModCount;
-      logger.info(`[SERVER_STATS] ${collectionSlug} mod count breakdown: raw modFiles=${rawModFiles.length}, after dropping null file.mod=${mods.length} (dropped ${droppedNullMod}), distinct mods=${distinctModCount} (${duplicateFiles} duplicate file(s) collapsed)`);
-
-      stats.push({ key: 'modsChannelId', name: `🧩 Mods: ${distinctModCount.toLocaleString()}` });
+      stats.push({ key: 'modsChannelId', name: `🧩 Mods: ${modFileCount.toLocaleString()}` });
       stats.push({ key: 'revisionChannelId', name: `🔧 Revision: ${revisionData.revisionNumber}` });
     } catch (err) {
       logger.error(`[SERVER_STATS] Failed to fetch collection ${collectionSlug} for guild ${guild.id}: ${err.message}`);
