@@ -107,6 +107,7 @@ class RevisionMonitor {
   }
 
   queueUpdate(client, guildId, collection, updateData) {
+    const guildConfig = guildConfigManager.loadGuildConfig(guildId);
     const groupConfig = guildConfigManager.getGroupForCollection(guildId, collection.slug);
 
     if (!groupConfig) {
