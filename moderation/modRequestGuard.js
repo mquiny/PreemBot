@@ -74,7 +74,7 @@ async function handleModRequestModeration(message) {
     if (!warning) {
       return;
     }
-// Test 
+
     setTimeout(() => {
       warning.delete().catch(() => null);
     }, 30_000);
