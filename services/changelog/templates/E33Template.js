@@ -12,15 +12,15 @@ class E33Template extends BaseTemplate {
       .setTitle(`Revision ${newRev} - Game Version ${gameVersion}`)
       .setDescription(
         "**⚠️ Important** - Don't forget to install new revisions to a separate profile, and remove old mods to prevent conflicts.\n\n" +
-        "Any issues with updating please refer to <#1461441742694781133>\n\n" +
-        "If you need further help ping a <@&1288633895910375464> or <@&1324783261439889439>"
+        "Any issues with updating please refer to our website https://mquiny.github.io/Preem-Team/installation/\n\n" +
+        "If you need further help ping a <@&1543374108052426752>."
       )
       .setColor(this.getColor('header'));
 
     const updateEmbed = new EmbedBuilder()
       .setTitle("Updating collection")
       .setDescription(
-        "If you run into any popups during installation check this thread <#1461441742694781133>\n\n"
+        "Check our website for an update guide https://mquiny.github.io/Preem-Team/installation>\n\n"
       )
       .setColor(this.getColor('warning'));
 
