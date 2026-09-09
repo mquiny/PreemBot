@@ -24,8 +24,8 @@ class Sub2Template extends BaseTemplate {
     const headerEmbed = new EmbedBuilder()
       .setTitle(revisionTitle)
       .setDescription(
-        "Any issues with updating please refer to <#1400940644565782599> & <#1285797091750187039>\n\n" +
-        "If you need further help ping <@&1456751771841204295>"
+        "Any issues with updating please refer to our website https://mquiny.github.io/Preem-Team/installation/ \n\n" +
+        "If you need further help ping <@&1543374108052426752>"
       )
       .setColor(this.getColor('header'));
 
@@ -40,7 +40,7 @@ class Sub2Template extends BaseTemplate {
     const updateEmbed = new EmbedBuilder()
       .setTitle("Updating collection")
       .setDescription(
-        "**⚠️ Important** - Refer to the bottom of this channel for how to update <#1508084714504847371>.\n\n"
+        "**⚠️ Important** - Make sure to add update to a new profile.\n\n"
       )
       .setColor(this.getColor('warning'));
 
