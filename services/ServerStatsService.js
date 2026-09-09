@@ -18,7 +18,7 @@
 // channel, so this only runs every 10 minutes, and skips the rename API
 // call entirely when the target name hasn't actually changed since last
 // time.
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType } = require('discord.js');
 const logger = require('../utils/logger');
 const { getStatsCategoryId, getStatsCollectionSlug } = require('../utils/guildConfig');
 const statsState = require('../utils/serverStatsState');
@@ -103,20 +103,31 @@ class ServerStatsService {
         : null;
 
       if (!channel) {
+        // Create the channel on its own first -- only needs Manage
+        // Channels. Locking it (denying @everyone Connect) is a separate
+        // step below: Discord only lets an actor set an overwrite for a
+        // permission it itself currently holds at that location, so if
+        // the bot's own effective Connect permission is denied there
+        // (category-specific overrides, etc.) bundling the overwrite into
+        // the create call fails the whole thing with "Missing
+        // Permissions" and no channel gets created at all.
         channel = await guild.channels.create({
           name: stat.name,
           type: ChannelType.GuildVoice,
           parent: category.id,
           position: i,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.Connect],
-            },
-          ],
         });
         statsState.setGuildChannel(guild.id, stat.key, channel.id, logger);
         logger.info(`[SERVER_STATS] Created "${stat.name}" channel (${channel.id}) in guild ${guild.id}`);
+
+        try {
+          await channel.permissionOverwrites.create(guild.roles.everyone, {
+            Connect: false,
+          });
+        } catch (err) {
+          logger.warn(`[SERVER_STATS] Created ${channel.id} but couldn't lock it against joining (bot likely lacks Connect permission itself in that category) -- it'll stay joinable until that's granted: ${err.message}`);
+        }
+
         continue;
       }
 
