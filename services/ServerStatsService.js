@@ -70,8 +70,19 @@ class ServerStatsService {
         process.env.APP_VERSION
       );
 
-      const mods = processModFiles(revisionData.modFiles || []);
+      const rawModFiles = revisionData.modFiles || [];
+      const mods = processModFiles(rawModFiles);
       const distinctModCount = new Set(mods.map(m => m.id)).size;
+
+      // Temporary diagnostic breakdown -- if distinctModCount doesn't
+      // match the collection's own Nexus page count, this line shows
+      // whether the gap is (a) processModFiles dropping entries with no
+      // resolved file.mod (broken/removed file references) or (b) mods
+      // genuinely appearing under multiple files that got deduped. Remove
+      // once the mismatch reported 2026-09 is understood.
+      const droppedNullMod = rawModFiles.length - mods.length;
+      const duplicateFiles = mods.length - distinctModCount;
+      logger.info(`[SERVER_STATS] ${collectionSlug} mod count breakdown: raw modFiles=${rawModFiles.length}, after dropping null file.mod=${mods.length} (dropped ${droppedNullMod}), distinct mods=${distinctModCount} (${duplicateFiles} duplicate file(s) collapsed)`);
 
       stats.push({ key: 'modsChannelId', name: `🧩 Mods: ${distinctModCount.toLocaleString()}` });
       stats.push({ key: 'revisionChannelId', name: `🔧 Revision: ${revisionData.revisionNumber}` });
