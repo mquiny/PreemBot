@@ -82,7 +82,11 @@ module.exports = {
       if (!sendData.content && !sendData.embeds) continue; // nothing in this block to post
 
       try {
-        await targetChannel.send(sendData);
+        logger.info(
+          `[POSTEMBED] Sending to #${targetChannel.name}: content=${Boolean(sendData.content)} embeds=${sendData.embeds ? sendData.embeds.length : 0}`
+        );
+        const sent = await targetChannel.send(sendData);
+        logger.info(`[POSTEMBED] Discord returned message ${sent.id} with ${sent.embeds.length} embed(s) actually attached.`);
         posted++;
       } catch (err) {
         logger.error(`[POSTEMBED] Failed sending message ${posted + 1}: ${err.message}`);
