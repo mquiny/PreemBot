@@ -1,0 +1,23 @@
+{
+  "guilds": {
+    "1285796904160202752": {
+      "enabled": true,
+      "channelId": "1361831774975561849",
+      "message": "Welcome to **{server}**! {user} with you, there are **{memberCount}** of us. 🥳🎉",
+      "logo": "https://i.postimg.cc/NFmFGC4M/a-neon-sign-with-the-words-night-city-re-4va5xh1-YRs-GHAi-SH70-Nmq-A-50-CSylg6-QESwtqo-Tsc-OQm-A.jpg",
+      "embedColor": "#2B2D31",
+      "showUsernameBelowAvatar": true,
+      "embedFooter": "Night City Reborn • Enjoy your stay!"
+    },
+
+    "1543366600525217802": {
+      "enabled": true,
+      "channelId": "1543379870803951816",
+      "message": "Preem, a new Choomba {user} has joined the family, there are now **{memberCount}** family members here. 🥳🎉",
+      "logo": "https://raw.githubusercontent.com/NCReborn/content-images/main/Choomba_Collection.png",
+      "embedColor": "#2B2D31",
+      "showUsernameBelowAvatar": true,
+      "embedFooter": "Cyberpunk Preem Edition • We hope you enjoy your stay!"
+    }
+  }
+}

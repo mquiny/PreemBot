@@ -1,0 +1,151 @@
+const logger = require('./logger');
+const CONSTANTS = require('../config/constants');
+const moderatorRolesByGuild = require('../config/moderatorRoles.json');
+const staffRolesByGuild = require('../config/staffRoles.json');
+
+// Single source of truth for "who counts as a moderator" per guild --
+// consumed by utils/permissions.js (hasModRole) and
+// services/spam/SpamDetector.js (isWhitelisted). Used to hardcode NCR's
+// role IDs directly in each of those files independently, which meant
+// every other guild's real moderators were silently unrecognized (e.g.
+// CPE mods got no anti-spam exemption at all). Add a guild's entry here
+// once, both call sites pick it up automatically.
+function getModeratorRoleIds(guildId) {
+  if (!guildId) return [];
+  return moderatorRolesByGuild[guildId] || [];
+}
+
+// "Staff" here is a narrower, display-only concept than moderator --
+// used to hide staff from member-facing leaderboards (Discord and the
+// site). Deliberately separate from moderatorRoles.json: e.g. CPE's
+// "Helper" role grants moderator-level command access but isn't
+// staff for leaderboard purposes, per how that role's meant to be used.
+function getStaffRoleIds(guildId) {
+  if (!guildId) return [];
+  return staffRolesByGuild[guildId] || [];
+}
+
+function parseCsvList(value) {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function getConfiguredGuildIds() {
+  const guildIds = parseCsvList(process.env.GUILD_IDS);
+  if (guildIds.length > 0) return guildIds;
+  return parseCsvList(process.env.GUILD_ID);
+}
+
+function parseGuildChannelMap(value) {
+  if (!value) return {};
+
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return Object.fromEntries(
+          Object.entries(parsed)
+            .filter(([guildId, channelId]) => guildId && channelId)
+            .map(([guildId, channelId]) => [String(guildId).trim(), String(channelId).trim()])
+        );
+      }
+    } catch (err) {
+      logger.warn(`[GUILD_CONFIG] Failed to parse JSON guild channel map: ${err.message}`);
+    }
+  }
+
+  const entries = trimmed.split(',').map(entry => entry.trim()).filter(Boolean);
+  const map = {};
+  for (const entry of entries) {
+    const [guildId, channelId] = entry.split(':').map(part => part?.trim());
+    if (guildId && channelId) {
+      map[guildId] = channelId;
+    }
+  }
+  return map;
+}
+
+function getShowcaseChannelMap() {
+  return parseGuildChannelMap(process.env.SHOWCASE_CHANNEL_IDS);
+}
+
+function getBotSpamChannelMap() {
+  return parseGuildChannelMap(process.env.BOT_SPAM_CHANNEL_IDS);
+}
+
+function getCollectionHealthChannelMap() {
+  return parseGuildChannelMap(process.env.COLLECTION_HEALTH_CHANNEL_IDS);
+}
+
+function getGuildChannelId(guildId, channelType) {
+  if (!guildId) return null;
+
+  const guildIds = getConfiguredGuildIds();
+  const legacySingleGuildId = guildIds.length === 1 ? guildIds[0] : null;
+
+  if (channelType === 'showcase') {
+    const configured = getShowcaseChannelMap()[guildId];
+    if (configured) return configured;
+    if (legacySingleGuildId === guildId) return CONSTANTS.CHANNELS.SHOWCASE || null;
+    return null;
+  }
+
+  if (channelType === 'botSpam') {
+    const configured = getBotSpamChannelMap()[guildId];
+    if (configured) return configured;
+    if (legacySingleGuildId === guildId) return CONSTANTS.CHANNELS.BOT_SPAM || null;
+    return null;
+  }
+
+  if (channelType === 'collectionHealth') {
+    return getCollectionHealthChannelMap()[guildId] || null;
+  }
+
+  return null;
+}
+
+function logMissingRequiredGuildChannelMappings(client) {
+  const configuredGuildIds = getConfiguredGuildIds();
+  const guildIdsToCheck = configuredGuildIds.length > 0
+    ? configuredGuildIds
+    : client.guilds.cache.map(guild => guild.id);
+
+  if (guildIdsToCheck.length === 0) return;
+
+  const showcaseMap = getShowcaseChannelMap();
+  const botSpamMap = getBotSpamChannelMap();
+  const legacySingleGuildId = configuredGuildIds.length === 1 ? configuredGuildIds[0] : null;
+
+  const missingShowcase = [];
+  const missingBotSpam = [];
+
+  for (const guildId of guildIdsToCheck) {
+    const hasShowcase = Boolean(showcaseMap[guildId]) || (legacySingleGuildId === guildId && Boolean(CONSTANTS.CHANNELS.SHOWCASE));
+    const hasBotSpam = Boolean(botSpamMap[guildId]) || (legacySingleGuildId === guildId && Boolean(CONSTANTS.CHANNELS.BOT_SPAM));
+
+    if (!hasShowcase) missingShowcase.push(guildId);
+    if (!hasBotSpam) missingBotSpam.push(guildId);
+  }
+
+  if (missingShowcase.length > 0) {
+    logger.warn(`[CONFIGCHECK] Missing showcase channel mapping for guild IDs: ${missingShowcase.join(', ')}. Set SHOWCASE_CHANNEL_IDS (format: guildId:channelId,guildId2:channelId2).`);
+  }
+
+  if (missingBotSpam.length > 0) {
+    logger.warn(`[CONFIGCHECK] Missing bot spam (StreetCred announcement) channel mapping for guild IDs: ${missingBotSpam.join(', ')}. Set BOT_SPAM_CHANNEL_IDS (format: guildId:channelId,guildId2:channelId2).`);
+  }
+}
+
+module.exports = {
+  getConfiguredGuildIds,
+  getGuildChannelId,
+  getModeratorRoleIds,
+  getStaffRoleIds,
+  logMissingRequiredGuildChannelMappings,
+};
