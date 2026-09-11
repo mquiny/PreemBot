@@ -87,6 +87,7 @@ A multi-rule detection engine (`/antispam` to configure), all scoped per guild:
 - `/diagnostics` — diagnostic tools for troubleshooting the bot itself
 - `/ncrbotmsg` — post a multi-line message as the bot via a modal (admin only)
 - `/postembed` — post one or more rich embeds from a Discohook JSON export, straight from an attached `.json` file (admin only)
+- `/known-issue sent-to-site` / `/known-issue resolved` — push a Discord message describing a known issue to the website's Known Issues page, and later mark it resolved (moves it to the site's archive) (admin only)
 
 ---
 
