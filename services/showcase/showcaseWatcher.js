@@ -1,22 +1,44 @@
 // services/showcase/showcaseWatcher.js
 //
-// Watches #showcase for either 10 unique reactors (any emoji) or a single
-// staff ⭐, and fires a site dispatch the moment a post qualifies.
+// Watches #showcase for either 10 unique reactors (any emoji) or a staff
+// member reacting with one of the configured staff emojis, and fires a
+// site dispatch the moment a post qualifies.
 
 const fs = require("fs");
 const path = require("path");
 const { dispatchShowcaseToSite } = require("../../utils/siteShowcaseDispatcher");
+const { getModeratorRoleIds } = require("../../utils/guildConfig");
 const logger = require("../../utils/logger");
 
 const SHOWCASE_CHANNEL_ID = process.env.SHOWCASE_CHANNEL_ID;
 
-const STAFF_ROLE_IDS = (process.env.SHOWCASE_STAFF_ROLE_ID || "")
-  .split(",")
-  .map((id) => id.trim())
-  .filter(Boolean);
+// "Staff" here deliberately means the same moderatorRoles.json list used
+// everywhere else in the bot (permissions.js, SpamDetector, etc.) rather
+// than a separate role list of its own — this used to read its own
+// SHOWCASE_STAFF_ROLE_ID env var, which for CPE's guild didn't include the
+// Community Support role that moderatorRoles.json does, so a mod's staff
+// react silently never triggered an instant feature. Single source of
+// truth now: whoever the bot already treats as a moderator can
+// instant-feature a showcase post.
+function isStaffMember(member) {
+  if (!member) return false;
+  const staffRoleIds = getModeratorRoleIds(member.guild.id);
+  return staffRoleIds.some((roleId) => member.roles.cache.has(roleId));
+}
 
 const REACTION_THRESHOLD = parseInt(process.env.SHOWCASE_REACTION_THRESHOLD || "10", 10);
-const STAFF_EMOJI = process.env.SHOWCASE_STAFF_EMOJI || "⭐";
+
+// One or more emojis that count as an instant staff feature — comma
+// separated, so different custom emojis (or a mix of custom and unicode)
+// can all trigger it, not just a single hardcoded ⭐. For a custom emoji,
+// use its name without colons (e.g. "PEsamurai"), matching what
+// reaction.emoji.name returns for it. Falls back to the legacy singular
+// SHOWCASE_STAFF_EMOJI env var, then to ⭐, so existing deployments don't
+// need to change anything to keep working.
+const STAFF_EMOJIS = (process.env.SHOWCASE_STAFF_EMOJIS || process.env.SHOWCASE_STAFF_EMOJI || "⭐")
+  .split(",")
+  .map((emoji) => emoji.trim())
+  .filter(Boolean);
 
 const SUBMISSIONS_PATH = path.join(__dirname, "..", "..", "data", "showcaseSubmissions.json");
 
@@ -91,10 +113,9 @@ function initShowcaseWatcher(client) {
       const message = reaction.message;
       if (submitted.has(message.id)) return;
 
-      if (reaction.emoji.name === STAFF_EMOJI && STAFF_ROLE_IDS.length) {
+      if (STAFF_EMOJIS.includes(reaction.emoji.name)) {
         const member = await message.guild.members.fetch(user.id).catch(() => null);
-        const isStaff = member && STAFF_ROLE_IDS.some((roleId) => member.roles.cache.has(roleId));
-        if (isStaff) {
+        if (isStaffMember(member)) {
           await tryFeature(message, submitted);
           return;
         }
@@ -109,7 +130,7 @@ function initShowcaseWatcher(client) {
     }
   });
 
-  logger.info(`[showcase] Watching #${SHOWCASE_CHANNEL_ID} (threshold=${REACTION_THRESHOLD}, staff emoji=${STAFF_EMOJI}, staff roles=${STAFF_ROLE_IDS.join(",") || "none"})`);
+  logger.info(`[showcase] Watching #${SHOWCASE_CHANNEL_ID} (threshold=${REACTION_THRESHOLD}, staff emojis=${STAFF_EMOJIS.join(",")}, staff roles=per-guild moderatorRoles.json)`);
 }
 
 module.exports = { initShowcaseWatcher };
