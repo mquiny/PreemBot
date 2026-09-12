@@ -28,7 +28,7 @@ class NCRTemplate extends BaseTemplate {
       .setTitle(revisionTitle)
       .setDescription(
         "**⚠️ Important** - To clear out old version files, permanently delete all files in the Cyberpunk 2077\\r6\\cache folder with each new revision, verify the game files, then deploy mods from vortex.\n\n" +
-        "Any issues with updating please refer to our website https://mquiny.github.io/Preem-Team/installation/\n\n" +
+        "Any issues with updating please refer to our website https://preem.team\n\n" +
         "If you need further help ping <@&1543374108052426752>"
       )
       .setColor(this.getColor('header'));
@@ -44,7 +44,7 @@ class NCRTemplate extends BaseTemplate {
     const updateEmbed = new EmbedBuilder()
       .setTitle("Updating collection")
       .setDescription(
-        "**⚠️ Important** - For a quick guide on updating your collection, follow the guide on our website https://mquiny.github.io/Preem-Team/installation/\n\n" 
+        "**⚠️ Important** - For a quick guide on updating your collection, follow the guide on our website https://preem.team/installation/updating_cpe_collection/\n\n" 
       )
       .setColor(this.getColor('warning'));
 
