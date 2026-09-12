@@ -119,6 +119,16 @@ function initShowcaseWatcher(client) {
           await tryFeature(message, submitted);
           return;
         }
+        // Reacted with a configured staff emoji but wasn't recognized as
+        // staff -- log why, rather than silently doing nothing, so a
+        // "my staff react didn't work" report can be diagnosed from the
+        // logs instead of guessing.
+        logger.info(
+          `[showcase] ${user.tag || user.id} reacted with staff emoji "${reaction.emoji.name}" but isn't ` +
+            `recognized as staff for this guild. Their roles: ${
+              member ? [...member.roles.cache.keys()].join(",") || "(none)" : "member fetch failed"
+            }. Guild's moderator role IDs: ${getModeratorRoleIds(message.guild.id).join(",") || "(none configured)"}`
+        );
       }
 
       const uniqueCount = await countUniqueReactors(message);
