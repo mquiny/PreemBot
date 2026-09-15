@@ -219,7 +219,15 @@ module.exports = {
               logger.info(`[COLLECTION_HEALTH] ${collection.display}: ${result.checkedSoFar}/${result.totalMods} checked this sweep`);
             }
           } catch (err) {
-            logger.error(`[COLLECTION_HEALTH] Batch failed for ${collection.slug} in guild ${guild.id}: ${err.message}`);
+            // err.message alone was "Received one or more errors" for an
+            // AggregateError (e.g. discord.js's embed-field validation) --
+            // useless for diagnosing which field/value actually failed.
+            // err.errors carries the real per-item detail when present.
+            const detail = Array.isArray(err.errors) ? err.errors.map((e) => e.message || e).join('; ') : null;
+            logger.error(
+              `[COLLECTION_HEALTH] Batch failed for ${collection.slug} in guild ${guild.id}: ${err.message}` +
+                (detail ? ` | ${detail}` : '')
+            );
           }
         }
       }

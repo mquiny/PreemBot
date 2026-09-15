@@ -272,13 +272,29 @@ function resetSweep(guildId, slug) {
 
 // Formats a capped list of "Name (vBundled -> vLatest)" lines, adding a
 // "+N more" line rather than letting the field grow unbounded -- Discord
-// embed fields cap at 1024 characters.
-function formatModList(mods, formatter, cap = 20) {
-  const shown = mods.slice(0, cap).map(formatter);
-  if (mods.length > cap) {
-    shown.push(`*+${mods.length - cap} more*`);
+// embed fields hard-cap at 1024 characters, and discord.js throws
+// (AggregateError: "Received one or more errors") rather than truncating
+// for you. Itemcap alone isn't enough to guarantee that: a collection
+// revision that bumps a lot of mods at once can put more genuinely
+// outdated mods in one field than ever before, and even 20 realistic
+// "[Name](url) (v1 -> v2)" lines can run 2-3x past 1024 chars on their
+// own -- confirmed the exact failure mode after a bulk revision update.
+// So this now budgets by actual character count too, not just item count.
+function formatModList(mods, formatter, { itemCap = 20, charBudget = 950 } = {}) {
+  const lines = [];
+  let used = 0;
+
+  for (const mod of mods) {
+    if (lines.length >= itemCap) break;
+    const line = formatter(mod);
+    if (used + line.length + 1 > charBudget) break; // +1 for the joining newline
+    lines.push(line);
+    used += line.length + 1;
   }
-  return shown.join('\n') || 'None';
+
+  const omitted = mods.length - lines.length;
+  if (omitted > 0) lines.push(`*+${omitted} more*`);
+  return lines.join('\n') || 'None';
 }
 
 function buildHealthReportEmbed(collectionDisplay, results) {
