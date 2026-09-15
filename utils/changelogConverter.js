@@ -1,5 +1,5 @@
 function convertChangelogToNexusMarkdownFromEmbeds(embeds) {
-  let out = `<details><summary>View content</summary>\n\n`;
+  let out = "";
   for (const embed of embeds) {
     if (embed.title) out += `### ${embed.title}\n\n`;
     if (embed.description) {
@@ -10,7 +10,6 @@ function convertChangelogToNexusMarkdownFromEmbeds(embeds) {
       out += desc + "\n\n";
     }
   }
-  out += `</details>`;
-  return out;
+  return out.trim();
 }
 module.exports = { convertChangelogToNexusMarkdownFromEmbeds };
