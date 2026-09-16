@@ -6,6 +6,7 @@ const revisionState = require('../utils/revisionState');
 const guildConfigManager = require('../config/guildConfigManager');
 const changelogGenerator = require('./changelog/ChangelogGenerator');
 const collectionHealthService = require('./CollectionHealthService');
+const { getGuildChannelId } = require('../utils/guildConfig');
 
 // Delay helper
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -110,6 +111,15 @@ class RevisionMonitor {
       // on its own.
       collectionHealthService.resetSweep(guildId, slug);
       logger.info(`[REVISION_MONITOR] Reset collection-health sweep for ${display} in guild ${guildId} (revision changed)`);
+
+      // Immediately reflect the restart on the standing report too --
+      // otherwise it silently sits on now-stale results for up to a day
+      // until the fresh sweep finishes, giving no sign the bot actually
+      // noticed the revision change.
+      const healthChannelId = getGuildChannelId(guildId, 'collectionHealth');
+      await collectionHealthService.postSweepRestartedNotice(client, guildId, slug, display, healthChannelId).catch((err) => {
+        logger.warn(`[REVISION_MONITOR] Failed to post sweep-restarted notice for ${display} in guild ${guildId}: ${err.message}`);
+      });
 
       await this.queueUpdate(client, guildId, collection, {
         oldRev: previousRevision || 0,

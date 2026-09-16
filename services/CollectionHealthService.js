@@ -62,11 +62,44 @@ function getReportRef(guildId, slug) {
   return (state.__reports && state.__reports[guildId] && state.__reports[guildId][slug]) || null;
 }
 
-function setReportRef(guildId, slug, ref) {
+// Merges rather than replaces, so a progress-only update (new
+// channelId/messageId after editing the standing message mid-sweep)
+// doesn't wipe out the last completed sweep's `results`/`totalMods` --
+// those need to survive until the NEXT completed sweep replaces them,
+// since they're what keeps the report's body populated while a new
+// sweep is still running.
+function setReportRef(guildId, slug, partialRef) {
   const state = loadState();
   if (!state.__reports) state.__reports = {};
   if (!state.__reports[guildId]) state.__reports[guildId] = {};
-  state.__reports[guildId][slug] = ref;
+  const existing = state.__reports[guildId][slug] || {};
+  state.__reports[guildId][slug] = { ...existing, ...partialRef };
+  saveState(state);
+}
+
+// Same idea as getReportRef/setReportRef, but for the overflow
+// continuation message -- kept separate so it can be created, edited, or
+// deleted independently of the main report (e.g. this sweep has no
+// overflow even though the last one did, so the old continuation message
+// needs to disappear rather than linger with stale entries).
+function getOverflowRef(guildId, slug) {
+  const state = loadState();
+  return (state.__overflow && state.__overflow[guildId] && state.__overflow[guildId][slug]) || null;
+}
+
+function setOverflowRef(guildId, slug, ref) {
+  const state = loadState();
+  if (!state.__overflow) state.__overflow = {};
+  if (!state.__overflow[guildId]) state.__overflow[guildId] = {};
+  state.__overflow[guildId][slug] = ref;
+  saveState(state);
+}
+
+function clearOverflowRef(guildId, slug) {
+  const state = loadState();
+  if (state.__overflow && state.__overflow[guildId]) {
+    delete state.__overflow[guildId][slug];
+  }
   saveState(state);
 }
 
@@ -270,16 +303,23 @@ function resetSweep(guildId, slug) {
   saveState(state);
 }
 
-// Formats a capped list of "Name (vBundled -> vLatest)" lines, adding a
-// "+N more" line rather than letting the field grow unbounded -- Discord
+const formatOutdatedLine = (m) =>
+  `[${m.name}](https://www.nexusmods.com/${m.domainName}/mods/${m.modId}) (${m.bundledVersion} → ${m.latestVersion})`;
+const formatUnavailableLine = (m) =>
+  `[${m.name}](https://www.nexusmods.com/${m.domainName}/mods/${m.modId})`;
+
+// Formats a capped list of "Name (vBundled -> vLatest)" lines. Discord
 // embed fields hard-cap at 1024 characters, and discord.js throws
 // (AggregateError: "Received one or more errors") rather than truncating
-// for you. Itemcap alone isn't enough to guarantee that: a collection
+// for you. Item count alone isn't enough to guarantee that: a collection
 // revision that bumps a lot of mods at once can put more genuinely
 // outdated mods in one field than ever before, and even 20 realistic
 // "[Name](url) (v1 -> v2)" lines can run 2-3x past 1024 chars on their
 // own -- confirmed the exact failure mode after a bulk revision update.
-// So this now budgets by actual character count too, not just item count.
+// So this budgets by actual character count too, not just item count --
+// and, instead of silently dropping whatever didn't fit behind a mystery
+// "+N more", returns those leftover mods so the caller can put them in an
+// overflow continuation message instead of losing them.
 function formatModList(mods, formatter, { itemCap = 20, charBudget = 950 } = {}) {
   const lines = [];
   let used = 0;
@@ -292,48 +332,256 @@ function formatModList(mods, formatter, { itemCap = 20, charBudget = 950 } = {})
     used += line.length + 1;
   }
 
-  const omitted = mods.length - lines.length;
-  if (omitted > 0) lines.push(`*+${omitted} more*`);
-  return lines.join('\n') || 'None';
+  const overflowMods = mods.slice(lines.length);
+  return { text: lines.join('\n') || 'None', overflowMods };
 }
 
-function buildHealthReportEmbed(collectionDisplay, results) {
-  const outdated = results.filter((r) => r.outdated && !r.unavailable);
-  const unavailable = results.filter((r) => r.unavailable);
-  const healthy = results.length - outdated.length - unavailable.length;
+// Splits a mod list into 1024-char-safe text chunks, one per eventual
+// embed field -- used for the overflow continuation message, which can
+// itself need more than one field/embed if enough mods spilled over.
+function chunkModList(mods, formatter, charBudget = 950) {
+  const chunks = [];
+  let current = [];
+  let used = 0;
+
+  for (const mod of mods) {
+    const line = formatter(mod);
+    if (used > 0 && used + line.length + 1 > charBudget) {
+      chunks.push(current.join('\n'));
+      current = [];
+      used = 0;
+    }
+    current.push(line);
+    used += line.length + 1;
+  }
+  if (current.length > 0) chunks.push(current.join('\n'));
+  return chunks;
+}
+
+/**
+ * Builds the main report embed. `results` is always the last FULLY
+ * completed sweep's data -- while a new sweep is running, that's
+ * intentionally stale-but-labeled data rather than the new sweep's
+ * partial results, since showing only the mods re-checked so far would
+ * misrepresent the ones not yet re-checked this pass as healthy.
+ *
+ * @param {object} meta
+ * @param {number} meta.checkedSoFar  Mods checked in the CURRENT sweep.
+ * @param {number} meta.totalMods     Mods in the CURRENT (or, if
+ *   justRestarted, the previous) sweep.
+ * @param {boolean} [meta.complete]   True once the current sweep finished.
+ * @param {boolean} [meta.firstSweep] True if there's no completed sweep
+ *   yet at all (nothing to show in the body).
+ * @param {boolean} [meta.justRestarted] True right when a revision change
+ *   reset the sweep -- distinct wording from an ordinary in-progress tick.
+ * @returns {{ embed: EmbedBuilder, overflow: { outdated: object[], unavailable: object[] } }}
+ */
+function buildHealthReportEmbed(collectionDisplay, results, meta = {}) {
+  const { checkedSoFar = 0, totalMods = 0, complete = true, firstSweep = false, justRestarted = false } = meta;
 
   const embed = new EmbedBuilder()
     .setTitle(`🩺 Collection Health Report — ${collectionDisplay}`)
-    .setColor(outdated.length + unavailable.length > 0 ? 0xffa52e : 0x78ffa0)
-    .setDescription(
-      `Checked **${results.length}** mods against their current Nexus listing.\n` +
-      `✅ ${healthy} up to date · 🔄 ${outdated.length} outdated · ⚠️ ${unavailable.length} unavailable`
-    )
     .setTimestamp();
 
-  if (outdated.length > 0) {
-    embed.addFields({
-      name: '🔄 Outdated (bundled → latest)',
-      value: formatModList(outdated, (m) => `[${m.name}](https://www.nexusmods.com/${m.domainName}/mods/${m.modId}) (${m.bundledVersion} → ${m.latestVersion})`)
-    });
+  const overflow = { outdated: [], unavailable: [] };
+
+  if (firstSweep) {
+    embed
+      .setColor(0x5865f2)
+      .setDescription('First health sweep in progress — results will appear here once it completes.');
+  } else {
+    const outdated = results.filter((r) => r.outdated && !r.unavailable);
+    const unavailable = results.filter((r) => r.unavailable);
+    const healthy = results.length - outdated.length - unavailable.length;
+
+    embed
+      .setColor(outdated.length + unavailable.length > 0 ? 0xffa52e : 0x78ffa0)
+      .setDescription(
+        `Checked **${results.length}** mods against their current Nexus listing.\n` +
+        `✅ ${healthy} up to date · 🔄 ${outdated.length} outdated · ⚠️ ${unavailable.length} unavailable`
+      );
+
+    if (outdated.length > 0) {
+      const { text, overflowMods } = formatModList(outdated, formatOutdatedLine);
+      embed.addFields({ name: '🔄 Outdated (bundled → latest)', value: text });
+      overflow.outdated = overflowMods;
+    }
+
+    if (unavailable.length > 0) {
+      const { text, overflowMods } = formatModList(unavailable, formatUnavailableLine);
+      embed.addFields({ name: '⚠️ No longer published on Nexus', value: text });
+      overflow.unavailable = overflowMods;
+    }
+
+    const overflowCount = overflow.outdated.length + overflow.unavailable.length;
+    if (overflowCount > 0) {
+      embed.addFields({
+        name: '📄 More',
+        value: `${overflowCount} additional ${overflowCount === 1 ? 'entry' : 'entries'} continued in the message below.`
+      });
+    }
   }
 
-  if (unavailable.length > 0) {
-    embed.addFields({
-      name: '⚠️ No longer published on Nexus',
-      value: formatModList(unavailable, (m) => `[${m.name}](https://www.nexusmods.com/${m.domainName}/mods/${m.modId})`)
+  let footerText;
+  if (justRestarted) {
+    footerText = `🔄 Revision update detected — sweep restarted (0 checked so far; previous sweep covered ${totalMods} mods)`;
+  } else if (firstSweep) {
+    footerText = `First sweep in progress — ${checkedSoFar}/${totalMods} checked so far`;
+  } else if (!complete) {
+    footerText = `🔄 New sweep in progress — ${checkedSoFar}/${totalMods} checked so far (results above are from the previous sweep)`;
+  } else {
+    footerText = `✅ Full sweep complete — ${totalMods}/${totalMods} checked`;
+  }
+  embed.setFooter({ text: footerText });
+
+  return { embed, overflow };
+}
+
+// Turns whatever didn't fit in the main report's fields into one or more
+// continuation embeds -- grouped into a single message (Discord allows up
+// to 10 embeds per message), covering realistic overflow sizes without
+// needing multi-message pagination.
+function buildOverflowEmbeds(collectionDisplay, overflowOutdated, overflowUnavailable) {
+  const fields = [];
+
+  const outdatedChunks = chunkModList(overflowOutdated, formatOutdatedLine);
+  outdatedChunks.forEach((chunk, i) => {
+    fields.push({
+      name: outdatedChunks.length > 1 ? `🔄 Outdated, continued (${i + 1}/${outdatedChunks.length})` : '🔄 Outdated, continued',
+      value: chunk
     });
+  });
+
+  const unavailableChunks = chunkModList(overflowUnavailable, formatUnavailableLine);
+  unavailableChunks.forEach((chunk, i) => {
+    fields.push({
+      name: unavailableChunks.length > 1 ? `⚠️ Unavailable, continued (${i + 1}/${unavailableChunks.length})` : '⚠️ Unavailable, continued',
+      value: chunk
+    });
+  });
+
+  if (fields.length === 0) return [];
+
+  const embeds = [];
+  for (let i = 0; i < fields.length; i += 25) {
+    // Discord embeds cap at 25 fields each.
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle(`🩺 Collection Health Report — ${collectionDisplay} (continued)`)
+        .setColor(0xffa52e)
+        .addFields(fields.slice(i, i + 25))
+    );
   }
 
-  return embed;
+  if (embeds.length > 10) {
+    logger.warn(`[COLLECTION_HEALTH] Overflow for ${collectionDisplay} needed ${embeds.length} embeds -- Discord caps a message at 10, truncating the rest.`);
+    return embeds.slice(0, 10);
+  }
+  return embeds;
+}
+
+// Posts a fresh message or edits the existing tracked one in place.
+// Shared by the normal hourly report update and RevisionMonitor's
+// "sweep restarted" notice, so both go through the same fetch/edit/send
+// logic instead of duplicating it. Returns the message id, or null if the
+// channel couldn't be reached.
+async function postOrEditReport(client, guildId, slug, reportChannelId, embed) {
+  const channel = await client.channels.fetch(reportChannelId).catch(() => null);
+  if (!channel) {
+    logger.warn(`[COLLECTION_HEALTH] Report channel ${reportChannelId} not found for guild ${guildId}`);
+    return null;
+  }
+
+  const ref = getReportRef(guildId, slug);
+  const existingMessage = ref && ref.channelId === reportChannelId
+    ? await channel.messages.fetch(ref.messageId).catch(() => null)
+    : null;
+
+  if (existingMessage) {
+    await existingMessage.edit({ embeds: [embed] });
+    return existingMessage.id;
+  }
+
+  const sent = await channel.send({ embeds: [embed] });
+  return sent.id;
+}
+
+// Creates, updates, or retroactively removes the overflow continuation
+// message so it always matches what the current report actually needs --
+// a sweep with no overflow this time deletes a leftover one from before
+// rather than leaving stale entries sitting there indefinitely.
+async function syncOverflowMessage(client, guildId, slug, collectionDisplay, reportChannelId, overflow) {
+  const hasOverflow = overflow.outdated.length > 0 || overflow.unavailable.length > 0;
+  const existingRef = getOverflowRef(guildId, slug);
+
+  if (!hasOverflow) {
+    if (existingRef) {
+      const channel = await client.channels.fetch(existingRef.channelId).catch(() => null);
+      const msg = channel ? await channel.messages.fetch(existingRef.messageId).catch(() => null) : null;
+      if (msg) await msg.delete().catch(() => {});
+      clearOverflowRef(guildId, slug);
+    }
+    return;
+  }
+
+  const embeds = buildOverflowEmbeds(collectionDisplay, overflow.outdated, overflow.unavailable);
+  const channel = await client.channels.fetch(reportChannelId).catch(() => null);
+  if (!channel) {
+    logger.warn(`[COLLECTION_HEALTH] Overflow channel ${reportChannelId} not found for guild ${guildId}`);
+    return;
+  }
+
+  const existingMessage = existingRef && existingRef.channelId === reportChannelId
+    ? await channel.messages.fetch(existingRef.messageId).catch(() => null)
+    : null;
+
+  if (existingMessage) {
+    await existingMessage.edit({ embeds });
+  } else {
+    const sent = await channel.send({ embeds });
+    setOverflowRef(guildId, slug, { channelId: reportChannelId, messageId: sent.id });
+  }
+}
+
+// Called by RevisionMonitor the moment it detects a new collection
+// revision -- posts/edits the standing report immediately so it's
+// obvious the bot noticed and is re-checking, rather than silently
+// sitting on now-stale results for up to a day until the new sweep
+// finishes on its own.
+async function postSweepRestartedNotice(client, guildId, slug, collectionDisplay, reportChannelId) {
+  if (!reportChannelId) return; // guild isn't opted into collection health reports
+
+  const ref = getReportRef(guildId, slug);
+  const priorResults = ref ? ref.results || [] : [];
+  const priorTotal = ref ? ref.totalMods || priorResults.length : 0;
+
+  const { embed } = buildHealthReportEmbed(collectionDisplay, priorResults, {
+    checkedSoFar: 0,
+    totalMods: priorTotal,
+    complete: false,
+    firstSweep: !ref,
+    justRestarted: true
+  });
+
+  const messageId = await postOrEditReport(client, guildId, slug, reportChannelId, embed);
+  if (messageId) {
+    setReportRef(guildId, slug, { channelId: reportChannelId, messageId });
+  }
 }
 
 module.exports = {
   runBatch,
   resetSweep,
   buildHealthReportEmbed,
+  buildOverflowEmbeds,
+  postOrEditReport,
+  syncOverflowMessage,
+  postSweepRestartedNotice,
   hasActiveSweep,
   getReportRef,
   setReportRef,
+  getOverflowRef,
+  setOverflowRef,
+  clearOverflowRef,
   computeSignature
 };

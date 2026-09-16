@@ -184,38 +184,63 @@ module.exports = {
             });
 
             if (result.done) {
-              // Only touch Discord if something a reader would care about
-              // actually changed since the last sweep -- otherwise a
-              // collection with nothing new re-posts a full report every
-              // few hours purely because the sweep itself finished again.
+              // Only touch the report's actual outdated/unavailable
+              // content if something a reader would care about changed --
+              // otherwise a collection with nothing new would re-post a
+              // full report every sweep purely because the sweep itself
+              // finished again. The footer/progress still updates on
+              // every tick regardless (handled by the in-progress branch
+              // below on every OTHER hourly run), so a completed sweep
+              // with no real changes just goes quiet until the next one.
               const signature = collectionHealthService.computeSignature(result.results);
               const ref = collectionHealthService.getReportRef(guild.id, collection.slug);
 
               if (ref && ref.signature === signature) {
                 logger.info(`[COLLECTION_HEALTH] ${collection.display}: no change since last report, skipping`);
               } else {
-                const channel = await client.channels.fetch(reportChannelId).catch(() => null);
-                if (channel) {
-                  const embed = collectionHealthService.buildHealthReportEmbed(collection.display, result.results);
-                  const existingMessage = ref && ref.channelId === reportChannelId
-                    ? await channel.messages.fetch(ref.messageId).catch(() => null)
-                    : null;
+                const { embed, overflow } = collectionHealthService.buildHealthReportEmbed(collection.display, result.results, {
+                  checkedSoFar: result.totalMods,
+                  totalMods: result.totalMods,
+                  complete: true
+                });
 
-                  if (existingMessage) {
-                    await existingMessage.edit({ embeds: [embed] });
-                    collectionHealthService.setReportRef(guild.id, collection.slug, { channelId: reportChannelId, messageId: existingMessage.id, signature });
-                  } else {
-                    const sent = await channel.send({ embeds: [embed] });
-                    collectionHealthService.setReportRef(guild.id, collection.slug, { channelId: reportChannelId, messageId: sent.id, signature });
-                  }
-                } else {
-                  logger.warn(`[COLLECTION_HEALTH] Report channel ${reportChannelId} not found for guild ${guild.id}`);
+                const messageId = await collectionHealthService.postOrEditReport(client, guild.id, collection.slug, reportChannelId, embed);
+                if (messageId) {
+                  collectionHealthService.setReportRef(guild.id, collection.slug, {
+                    channelId: reportChannelId,
+                    messageId,
+                    signature,
+                    results: result.results,
+                    totalMods: result.totalMods
+                  });
                 }
+
+                await collectionHealthService.syncOverflowMessage(client, guild.id, collection.slug, collection.display, reportChannelId, overflow);
               }
 
               collectionHealthService.resetSweep(guild.id, collection.slug);
               logger.info(`[COLLECTION_HEALTH] Sweep complete for ${collection.display} in guild ${guild.id} (${result.totalMods} mods)`);
             } else {
+              // Keep the standing report's progress footer current every
+              // hour, even though the body (last completed sweep's
+              // results) hasn't changed -- so watching the embed shows
+              // the new sweep actually climbing rather than looking
+              // frozen until it finishes.
+              const ref = collectionHealthService.getReportRef(guild.id, collection.slug);
+              const priorResults = ref ? ref.results || [] : [];
+
+              const { embed } = collectionHealthService.buildHealthReportEmbed(collection.display, priorResults, {
+                checkedSoFar: result.checkedSoFar,
+                totalMods: result.totalMods,
+                complete: false,
+                firstSweep: !ref
+              });
+
+              const messageId = await collectionHealthService.postOrEditReport(client, guild.id, collection.slug, reportChannelId, embed);
+              if (messageId) {
+                collectionHealthService.setReportRef(guild.id, collection.slug, { channelId: reportChannelId, messageId });
+              }
+
               logger.info(`[COLLECTION_HEALTH] ${collection.display}: ${result.checkedSoFar}/${result.totalMods} checked this sweep`);
             }
           } catch (err) {
