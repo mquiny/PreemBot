@@ -5,6 +5,7 @@ const { fetchRevision, processModFiles, computeDiff } = require('../utils/nexusA
 const revisionState = require('../utils/revisionState');
 const guildConfigManager = require('../config/guildConfigManager');
 const changelogGenerator = require('./changelog/ChangelogGenerator');
+const collectionHealthService = require('./CollectionHealthService');
 
 // Delay helper
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -97,6 +98,18 @@ class RevisionMonitor {
       const diffs = computeDiff(oldMods, newMods);
 
       revisionState.setCollectionRevision(guildId, slug, currentRevision, logger);
+
+      // A collection-health sweep snapshots the mod list once at the
+      // start and grinds through it in hourly batches for up to ~25
+      // hours (see CollectionHealthService.SWEEP_HOURS) -- if one was
+      // already in progress when this new revision landed, it would
+      // otherwise keep reporting against the now-stale pre-revision mod
+      // list for the rest of that sweep. Reset it here so the very next
+      // hourly batch starts a fresh sweep against the new revision
+      // immediately, instead of waiting up to a day for it to catch up
+      // on its own.
+      collectionHealthService.resetSweep(guildId, slug);
+      logger.info(`[REVISION_MONITOR] Reset collection-health sweep for ${display} in guild ${guildId} (revision changed)`);
 
       await this.queueUpdate(client, guildId, collection, {
         oldRev: previousRevision || 0,
