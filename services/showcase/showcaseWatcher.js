@@ -94,6 +94,28 @@ async function tryFeature(message, submitted) {
   logger.info(`[showcase] Featured message ${message.id} from ${payload.username}`);
 }
 
+// Self-contained variant of tryFeature() for callers outside the reaction
+// listener (currently: the "Send Gallery to Site" context-menu command) --
+// does its own load/mark I/O rather than sharing the watcher's in-memory
+// `submitted` Set, since the JSON file is the real source of truth and a
+// command invocation has no long-lived Set of its own to thread through.
+// Returns a reason string on failure so the caller can give the staff
+// member a specific reply instead of a silent no-op.
+async function featureMessage(message) {
+  const submitted = loadSubmitted();
+  if (submitted.has(message.id)) {
+    return { success: false, reason: "already_featured" };
+  }
+
+  const imageUrl = firstImageUrl(message);
+  if (!imageUrl) {
+    return { success: false, reason: "no_image" };
+  }
+
+  await tryFeature(message, submitted);
+  return { success: true };
+}
+
 function initShowcaseWatcher(client) {
   if (!SHOWCASE_CHANNEL_ID) {
     logger.warn("[showcase] SHOWCASE_CHANNEL_ID not set — showcase watcher disabled");
@@ -143,4 +165,4 @@ function initShowcaseWatcher(client) {
   logger.info(`[showcase] Watching #${SHOWCASE_CHANNEL_ID} (threshold=${REACTION_THRESHOLD}, staff emojis=${STAFF_EMOJIS.join(",")}, staff roles=per-guild moderatorRoles.json)`);
 }
 
-module.exports = { initShowcaseWatcher };
+module.exports = { initShowcaseWatcher, featureMessage };

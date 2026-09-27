@@ -21,6 +21,16 @@ const logger = require('../../utils/logger');
 // honest feedback to the staff member who ran it.
 const SUBMISSIONS_PATH = path.join(__dirname, '..', '..', 'data', 'feedbackSubmissions.json');
 
+// Scoped to exactly one channel by design (there's no reaction-threshold
+// path for feedback the way showcase has one, so this command IS the only
+// trigger -- letting it run anywhere would let staff feature a message
+// from any channel, including ones nobody intended to be quotable). No env
+// var for this one: unlike SHOWCASE_CHANNEL_ID (consumed by a watcher that
+// needs to be told where to listen), this only ever gates a single
+// command, so a hardcoded default that's still override-able covers it
+// without a new required env var most deployments would never touch.
+const FEEDBACK_CHANNEL_ID = process.env.FEEDBACK_CHANNEL_ID || '1547734597091987517';
+
 function loadSubmitted() {
   try {
     return new Set(JSON.parse(fs.readFileSync(SUBMISSIONS_PATH, 'utf8')));
@@ -41,6 +51,14 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 
   async execute(interaction) {
+    if (interaction.channelId !== FEEDBACK_CHANNEL_ID) {
+      await interaction.reply({
+        content: `❌ This can only be used on messages in <#${FEEDBACK_CHANNEL_ID}>.`,
+        flags: MessageFlags.Ephemeral
+      });
+      return;
+    }
+
     const message = interaction.targetMessage;
     const submitted = loadSubmitted();
 
