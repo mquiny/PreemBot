@@ -165,4 +165,4 @@ function initShowcaseWatcher(client) {
   logger.info(`[showcase] Watching #${SHOWCASE_CHANNEL_ID} (threshold=${REACTION_THRESHOLD}, staff emojis=${STAFF_EMOJIS.join(",")}, staff roles=per-guild moderatorRoles.json)`);
 }
 
-module.exports = { initShowcaseWatcher, featureMessage };
+module.exports = { initShowcaseWatcher, featureMessage, firstImageUrl };
