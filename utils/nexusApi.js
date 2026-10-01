@@ -43,12 +43,10 @@ async function fetchRevision(slug, revision, apiKey, appName, appVersion) {
     
     if (response.data.errors) {
       const errorMessage = response.data.errors.map(error => error.message).join(', ');
-      logger.error(`Nexus API error (GraphQL errors): ${errorMessage}`);
       throw new Error(`API Error: ${errorMessage}`);
     }
-    
+
     if (!response.data.data || !response.data.data.collectionRevision) {
-      logger.error(`Nexus API error: Revision ${revision} not found for collection ${slug}`);
       throw new Error(`Revision ${revision} not found for collection ${slug}`);
     }
 
@@ -61,13 +59,10 @@ async function fetchRevision(slug, revision, apiKey, appName, appVersion) {
     return response.data.data.collectionRevision;
   } catch (error) {
     if (error.response) {
-      logger.error(`Nexus API error: Status ${error.response.status} - ${error.response.statusText}`);
       throw new Error(`API returned status ${error.response.status}: ${error.response.statusText}`);
     } else if (error.request) {
-      logger.error('Nexus API error: No response received from Nexus Mods API.');
       throw new Error('No response received from Nexus Mods API. Please try again later.');
     } else {
-      logger.error(`Nexus API error: ${error.message}`);
       throw new Error(`Failed to fetch revision: ${error.message}`);
     }
   }

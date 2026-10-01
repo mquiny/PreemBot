@@ -35,6 +35,10 @@ class RevisionMonitor {
   async checkAllGuilds(client) {
     logger.debug('[REVISION_MONITOR] Checking all guilds...');
 
+    // Tracks error messages seen this sweep so a single outage (e.g. Nexus
+    // API downtime) doesn't get logged once per collection that hits it.
+    this.sweepErrorCounts = new Map();
+
     const guilds = client.guilds.cache;
 
     for (const [guildId, guild] of guilds) {
@@ -42,6 +46,12 @@ class RevisionMonitor {
         await this.checkGuildCollections(client, guildId);
       } catch (error) {
         logger.error(`[REVISION_MONITOR] Error checking guild ${guildId}:`, error);
+      }
+    }
+
+    for (const [message, count] of this.sweepErrorCounts) {
+      if (count > 1) {
+        logger.warn(`[REVISION_MONITOR] "${message}" occurred ${count} times this sweep (repeats suppressed above)`);
       }
     }
   }
@@ -60,8 +70,24 @@ class RevisionMonitor {
       try {
         await this.checkCollection(client, guildId, collection);
       } catch (error) {
-        logger.error(`[REVISION_MONITOR] Error checking ${collection.display} in guild ${guildId}:`, error);
+        this.logCollectionError(guildId, collection, error);
       }
+    }
+  }
+
+  // First occurrence of a given error message in this sweep logs normally;
+  // further collections hitting the exact same error (e.g. a Nexus API
+  // outage affecting every collection at once) get a quiet debug line
+  // instead, with the suppressed count surfaced once at the end of the sweep.
+  logCollectionError(guildId, collection, error) {
+    const message = error.message;
+    const count = (this.sweepErrorCounts?.get(message) || 0) + 1;
+    this.sweepErrorCounts?.set(message, count);
+
+    if (count === 1) {
+      logger.error(`[REVISION_MONITOR] Error checking ${collection.display} in guild ${guildId}: ${message}`);
+    } else {
+      logger.debug(`[REVISION_MONITOR] Error checking ${collection.display} in guild ${guildId}: ${message} (repeat #${count}, suppressed)`);
     }
   }
 
